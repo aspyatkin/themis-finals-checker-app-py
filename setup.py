@@ -30,7 +30,8 @@ setup(
         'requests>=2.11.0',
         'python-dateutil>=2.5.3,<2.6',
         'themis.finals.api.auth==1.0.0',
-        'themis.finals.checker.result==1.0.0'
+        'themis.finals.checker.result==1.0.0',
+        'raven>=5.26.0,<5.27.0'
     ],
     namespace_packages=[
         'themis',

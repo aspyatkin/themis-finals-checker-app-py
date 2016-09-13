@@ -10,6 +10,7 @@ import os
 from themis.finals.checker.result import Result
 from imp import load_source
 import logging
+import raven
 
 
 class Metadata(object):
@@ -44,6 +45,11 @@ checker_module_name = os.getenv(
 )
 checker_module = load_source('', checker_module_name)
 
+raven_enabled = os.getenv('SENTRY_DSN', None) is not None
+raven_client = None
+if raven_enabled:
+    raven_client = raven.Client(dsn=os.getenv('SENTRY_DSN'))
+
 
 def internal_push(endpoint, flag, adjunct, metadata):
     result, updated_adjunct = Result.INTERNAL_ERROR, adjunct
@@ -55,6 +61,8 @@ def internal_push(endpoint, flag, adjunct, metadata):
         else:
             result = raw_result
     except Exception:
+        if raven_enabled:
+            raven_client.captureException()
         logger.exception('An exception occurred', exc_info=exc_info())
     return result, updated_adjunct
 
@@ -64,6 +72,8 @@ def internal_pull(endpoint, flag, adjunct, metadata):
     try:
         result = checker_module.pull(endpoint, flag, adjunct, metadata)
     except Exception:
+        if raven_enabled:
+            raven_client.captureException()
         logger.exception('An exception occurred', exc_info=exc_info())
     return result
 
@@ -104,6 +114,33 @@ def queue_push(job_data):
         delivery_time,
         processing_time
     )
+
+    if raven_enabled:
+        short_log_message = u'PUSH `{0}...` /{1:d} to `{2}` - status {3}'.format(
+            params['flag'][0:8],
+            metadata.round,
+            metadata.team_name,
+            status.name
+        )
+
+        raven_client.captureMessage(
+            short_log_message,
+            level=logging.INFO,
+            tags={
+                'tf_operation': 'push',
+                'tf_status': status.name,
+                'tf_team': metadata.team_name,
+                'tf_service': metadata.service_name,
+                'tf_round': metadata.round
+            },
+            extra={
+                'endpoint': params['endpoint'],
+                'flag': params['flag'],
+                'adjunct': job_result['adjunct'],
+                'delivery_time': delivery_time,
+                'processing_time': processing_time
+            }
+        )
 
     logger.info(log_message)
 
@@ -150,6 +187,33 @@ def queue_pull(job_data):
         delivery_time,
         processing_time
     )
+
+    if raven_enabled:
+        short_log_message = u'PULL `{0}...` /{1:d} from `{2}` - status {3}'.format(
+            params['flag'][0:8],
+            metadata.round,
+            metadata.team_name,
+            status.name
+        )
+
+        raven_client.captureMessage(
+            short_log_message,
+            level=logging.INFO,
+            tags={
+                'tf_operation': 'pull',
+                'tf_status': status.name,
+                'tf_team': metadata.team_name,
+                'tf_service': metadata.service_name,
+                'tf_round': metadata.round
+            },
+            extra={
+                'endpoint': params['endpoint'],
+                'flag': params['flag'],
+                'adjunct': params['adjunct'],
+                'delivery_time': delivery_time,
+                'processing_time': processing_time
+            }
+        )
 
     logger.info(log_message)
 

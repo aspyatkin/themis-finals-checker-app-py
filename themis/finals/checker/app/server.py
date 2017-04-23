@@ -9,7 +9,7 @@ from functools import wraps
 from themis.finals.api.auth import verify_master_token
 from .worker import queue_push, queue_pull
 
-logger = logging.Logger(__name__)
+logger = logging.getLogger(__name__)
 
 queue = rq.Queue(connection=redis.Redis(
     host=os.getenv('REDIS_HOST', '127.0.0.1'),

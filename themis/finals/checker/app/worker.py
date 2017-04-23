@@ -11,6 +11,7 @@ from themis.finals.checker.result import Result
 from imp import load_source
 import logging
 import raven
+import jwt
 
 
 class Metadata(object):
@@ -37,7 +38,7 @@ class Metadata(object):
         return self._service_name
 
 
-logger = logging.Logger(__name__)
+logger = logging.getLogger(__name__)
 
 checker_module_name = os.getenv(
     'THEMIS_FINALS_CHECKER_MODULE',
@@ -51,31 +52,62 @@ if raven_enabled:
     raven_client = raven.Client(dsn=os.getenv('SENTRY_DSN'))
 
 
-def internal_push(endpoint, flag, adjunct, metadata):
-    result, updated_adjunct = Result.INTERNAL_ERROR, adjunct
+def internal_push(endpoint, capsule, label, metadata):
+    result = Result.INTERNAL_ERROR
+    updated_label = label
+    message = None
     try:
-        raw_result = checker_module.push(endpoint, flag, adjunct, metadata)
-        if isinstance(raw_result, tuple) and len(raw_result) == 2:
-            result = raw_result[0]
-            updated_adjunct = raw_result[1]
+        raw_result = checker_module.push(endpoint, capsule, label, metadata)
+        if isinstance(raw_result, tuple):
+            if len(raw_result) > 0:
+                result = raw_result[0]
+            if len(raw_result) > 1:
+                updated_label = raw_result[1]
+            if len(raw_result) > 2:
+                message = raw_result[2]
         else:
             result = raw_result
     except Exception:
         if raven_enabled:
             raven_client.captureException()
         logger.exception('An exception occurred', exc_info=exc_info())
-    return result, updated_adjunct
+    return result, updated_label, message
 
 
-def internal_pull(endpoint, flag, adjunct, metadata):
+def internal_pull(endpoint, capsule, label, metadata):
     result = Result.INTERNAL_ERROR
+    message = None
     try:
-        result = checker_module.pull(endpoint, flag, adjunct, metadata)
+        raw_result = checker_module.pull(endpoint, capsule, label, metadata)
+        if isinstance(raw_result, tuple):
+            if len(raw_result) > 0:
+                result = raw_result[0]
+            if len(raw_result) > 1:
+                message = raw_result[1]
+        else:
+            result = raw_result
     except Exception:
         if raven_enabled:
             raven_client.captureException()
         logger.exception('An exception occurred', exc_info=exc_info())
-    return result
+    return result, message
+
+
+def decode_capsule(capsule):
+    wrap_prefix = os.getenv('THEMIS_FINALS_FLAG_WRAP_PREFIX')
+    wrap_suffix = os.getenv('THEMIS_FINALS_FLAG_WRAP_SUFFIX')
+    token_start = len(wrap_prefix)
+    token_end = -len(wrap_suffix)
+    encoded_payload = capsule[token_start:token_end]
+
+    key = os.getenv('THEMIS_FINALS_FLAG_SIGN_KEY_PUBLIC').replace('\\n', "\n")
+
+    payload = jwt.decode(
+        encoded_payload,
+        algorithms=['ES256', 'RS256'],
+        key=key
+    )
+    return payload['flag']
 
 
 def queue_push(job_data):
@@ -84,17 +116,23 @@ def queue_push(job_data):
     timestamp_created = dateutil.parser.parse(metadata.timestamp)
     timestamp_delivered = datetime.now(tzlocal())
 
-    status, updated_adjunct = internal_push(
+    flag = decode_capsule(params['capsule'])
+
+    status, updated_label, message = internal_push(
         params['endpoint'],
-        params['flag'],
-        urlsafe_b64decode(params['adjunct'].encode('utf-8')),
-        metadata)
+        params['capsule'],
+        urlsafe_b64decode(params['label'].encode('utf-8')),
+        metadata
+    )
 
     timestamp_processed = datetime.now(tzlocal())
 
-    job_result = dict(status=status.value,
-                      flag=params['flag'],
-                      adjunct=urlsafe_b64encode(updated_adjunct))
+    job_result = dict(
+        status=status.value,
+        flag=flag,
+        label=urlsafe_b64encode(updated_label),
+        message=message
+    )
 
     delivery_time = (timestamp_delivered - timestamp_created).total_seconds()
     processing_time = (
@@ -102,22 +140,22 @@ def queue_push(job_data):
     ).total_seconds()
 
     log_message = (u'PUSH flag `{0}` /{1:d} to `{2}`@`{3}` ({4}) - status {5},'
-                   u' adjunct `{6}` [delivery {7:.2f}s, processing '
+                   u' label `{6}` [delivery {7:.2f}s, processing '
                    u'{8:.2f}s]').format(
-        params['flag'],
+        flag,
         metadata.round,
         metadata.service_name,
         metadata.team_name,
         params['endpoint'],
         status.name,
-        job_result['adjunct'],
+        job_result['label'],
         delivery_time,
         processing_time
     )
 
     if raven_enabled:
         short_log_message = u'PUSH `{0}...` /{1:d} to `{2}` - status {3}'.format(
-            params['flag'][0:8],
+            flag[0:8],
             metadata.round,
             metadata.team_name,
             status.name
@@ -135,8 +173,9 @@ def queue_push(job_data):
             },
             extra={
                 'endpoint': params['endpoint'],
-                'flag': params['flag'],
-                'adjunct': job_result['adjunct'],
+                'flag': flag,
+                'label': job_result['label'],
+                'message': job_result['message'],
                 'delivery_time': delivery_time,
                 'processing_time': processing_time
             }
@@ -149,7 +188,9 @@ def queue_push(job_data):
     headers[os.getenv('THEMIS_FINALS_AUTH_TOKEN_HEADER')] = \
         issue_checker_token()
     r = requests.post(uri, headers=headers, json=job_result)
-    logger.info(r.status_code)
+    if r.status_code != requests.codes.ok:
+        logger.error(r.status_code)
+        logger.error(r.reason)
 
 
 def queue_pull(job_data):
@@ -158,16 +199,22 @@ def queue_pull(job_data):
     timestamp_created = dateutil.parser.parse(metadata.timestamp)
     timestamp_delivered = datetime.now(tzlocal())
 
-    status = internal_pull(
+    flag = decode_capsule(params['capsule'])
+
+    status, message = internal_pull(
         params['endpoint'],
-        params['flag'],
-        urlsafe_b64decode(params['adjunct'].encode('utf-8')),
-        metadata)
+        params['capsule'],
+        urlsafe_b64decode(params['label'].encode('utf-8')),
+        metadata
+    )
 
     timestamp_processed = datetime.now(tzlocal())
 
-    job_result = dict(request_id=params['request_id'],
-                      status=status.value)
+    job_result = dict(
+        request_id=params['request_id'],
+        status=status.value,
+        message=message
+    )
 
     delivery_time = (timestamp_delivered - timestamp_created).total_seconds()
     processing_time = (
@@ -175,14 +222,14 @@ def queue_pull(job_data):
     ).total_seconds()
 
     log_message = (u'PULL flag `{0}` /{1:d} from `{2}`@`{3}` ({4}) with '
-                   u'adjunct `{5}` - status {6} [delivery {7:.2f}s, '
+                   u'label `{5}` - status {6} [delivery {7:.2f}s, '
                    u'processing {8:.2f}s]').format(
-        params['flag'],
+        flag,
         metadata.round,
         metadata.service_name,
         metadata.team_name,
         params['endpoint'],
-        params['adjunct'],
+        params['label'],
         status.name,
         delivery_time,
         processing_time
@@ -190,7 +237,7 @@ def queue_pull(job_data):
 
     if raven_enabled:
         short_log_message = u'PULL `{0}...` /{1:d} from `{2}` - status {3}'.format(
-            params['flag'][0:8],
+            flag[0:8],
             metadata.round,
             metadata.team_name,
             status.name
@@ -208,8 +255,9 @@ def queue_pull(job_data):
             },
             extra={
                 'endpoint': params['endpoint'],
-                'flag': params['flag'],
-                'adjunct': params['adjunct'],
+                'flag': flag,
+                'label': params['label'],
+                'message': message,
                 'delivery_time': delivery_time,
                 'processing_time': processing_time
             }
@@ -222,4 +270,6 @@ def queue_pull(job_data):
     headers[os.getenv('THEMIS_FINALS_AUTH_TOKEN_HEADER')] = \
         issue_checker_token()
     r = requests.post(uri, headers=headers, json=job_result)
-    logger.info(r.status_code)
+    if r.status_code != requests.codes.ok:
+        logger.error(r.status_code)
+        logger.error(r.reason)

@@ -18,7 +18,7 @@ setup(
     description='Themis Finals checker application',
     author='Alexander Pyatkin',
     author_email='aspyatkin@gmail.com',
-    url='https://github.com/aspyatkin/themis-finals-checker-app-py',
+    url='https://github.com/themis-project/themis-finals-checker-app-py',
     license='MIT',
     packages=find_packages('.'),
     install_requires=[
@@ -31,7 +31,10 @@ setup(
         'python-dateutil>=2.5.3,<2.6',
         'themis.finals.api.auth==1.0.0',
         'themis.finals.checker.result==1.0.0',
-        'raven>=5.26.0,<5.27.0'
+        'raven>=5.26.0,<5.27.0',
+        'PyJWT>=1.5.0,<1.6.0',
+        'cryptography>=1.8.1,<1.9.0',
+        'PyYAML>=3.11'
     ],
     namespace_packages=[
         'themis',

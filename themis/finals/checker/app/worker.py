@@ -173,6 +173,7 @@ def queue_push(job_data):
             },
             extra={
                 'endpoint': params['endpoint'],
+                'capsule': params['capsule'],
                 'flag': flag,
                 'label': job_result['label'],
                 'message': job_result['message'],
@@ -255,9 +256,10 @@ def queue_pull(job_data):
             },
             extra={
                 'endpoint': params['endpoint'],
+                'capsule': params['capsule'],
                 'flag': flag,
                 'label': params['label'],
-                'message': message,
+                'message': job_result['message'],
                 'delivery_time': delivery_time,
                 'processing_time': processing_time
             }

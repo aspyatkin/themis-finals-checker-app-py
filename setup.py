@@ -26,7 +26,7 @@ setup(
         'Flask>=0.11.1,<0.12',
         'redis>=2.10.5,<2.11',
         'hiredis>=0.2.0,<0.3',
-        'rq>=0.6.0,<0.7',
+        'rq>=0.7.1,<0.8.0',
         'requests>=2.11.0',
         'python-dateutil>=2.5.3,<2.6',
         'themis.finals.api.auth==1.0.0',
@@ -34,7 +34,8 @@ setup(
         'raven>=5.26.0,<5.27.0',
         'PyJWT>=1.5.0,<1.6.0',
         'cryptography>=1.8.1,<1.9.0',
-        'PyYAML>=3.11'
+        'PyYAML>=3.11',
+        'rq_dashboard>=0.3.7,<0.4.0'
     ],
     namespace_packages=[
         'themis',

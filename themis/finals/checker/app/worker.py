@@ -193,6 +193,8 @@ def queue_push(job_data):
         logger.error(r.status_code)
         logger.error(r.reason)
 
+    return job_result
+
 
 def queue_pull(job_data):
     params = job_data['params']
@@ -275,3 +277,5 @@ def queue_pull(job_data):
     if r.status_code != requests.codes.ok:
         logger.error(r.status_code)
         logger.error(r.reason)
+
+    return job_result

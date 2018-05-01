@@ -29,13 +29,11 @@ setup(
         'rq>=0.7.1,<0.8.0',
         'requests>=2.11.0',
         'python-dateutil>=2.5.3,<2.6',
-        'themis.finals.api.auth==1.0.0',
-        'themis.finals.checker.result==1.0.0',
+        'themis.finals.checker.result==1.1.0',
         'raven>=5.26.0,<5.27.0',
         'PyJWT>=1.5.0,<1.6.0',
         'cryptography>=1.8.1,<1.9.0',
-        'PyYAML>=3.11',
-        'rq_dashboard>=0.3.7,<0.4.0'
+        'PyYAML>=3.11'
     ],
     namespace_packages=[
         'themis',

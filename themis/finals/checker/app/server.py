@@ -5,8 +5,6 @@ import redis
 import rq
 import os
 import logging
-from functools import wraps
-from themis.finals.api.auth import verify_master_token
 from .worker import queue_push, queue_pull
 
 logger = logging.getLogger(__name__)
@@ -14,7 +12,8 @@ logger = logging.getLogger(__name__)
 queue = rq.Queue(connection=redis.Redis(
     host=os.getenv('REDIS_HOST', '127.0.0.1'),
     port=int(os.getenv('REDIS_PORT', '6379')),
-    db=int(os.getenv('REDIS_DB', '0'))
+    db=int(os.getenv('REDIS_DB', '0')),
+    password=os.getenv('REDIS_PASSWORD', None)
 ))
 
 app = flask.Flask(__name__)
@@ -41,21 +40,7 @@ def teardown_request(exception=None):
         logger.error('Uncaught exception!', exc_info=exception)
 
 
-def check_api_token(f):
-    @wraps(f)
-    def func(*args, **kwargs):
-        token = flask.request.headers.get(
-            os.getenv('THEMIS_FINALS_AUTH_TOKEN_HEADER'),
-            None
-        )
-        if not verify_master_token(token):
-            return '', 401
-        return f(*args, **kwargs)
-    return func
-
-
 @app.route('/push', methods=['POST'])
-@check_api_token
 def push():
     payload = flask.request.get_json()
     if payload is None:
@@ -71,7 +56,6 @@ def push():
 
 
 @app.route('/pull', methods=['POST'])
-@check_api_token
 def pull():
     payload = flask.request.get_json()
     if payload is None:

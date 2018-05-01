@@ -20,6 +20,8 @@ def start_worker():
     redis_host = os.getenv('REDIS_HOST', '127.0.0.1')
     redis_port = int(os.getenv('REDIS_PORT', '6379'))
     redis_db = int(os.getenv('REDIS_DB', '0'))
+    redis_password = os.getenv('REDIS_PASSWORD', None)
 
-    with Connection(Redis(host=redis_host, port=redis_port, db=redis_db)):
+    with Connection(Redis(host=redis_host, port=redis_port, db=redis_db,
+                          password=redis_password)):
         Worker(['default']).work()

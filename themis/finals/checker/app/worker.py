@@ -5,7 +5,6 @@ from dateutil.tz import tzlocal
 from base64 import urlsafe_b64encode, urlsafe_b64decode
 from sys import exc_info
 import requests
-from themis.finals.api.auth import issue_checker_token
 import os
 from themis.finals.checker.result import Result
 from imp import load_source
@@ -186,9 +185,9 @@ def queue_push(job_data):
 
     uri = job_data['report_url']
     headers = {}
-    headers[os.getenv('THEMIS_FINALS_AUTH_TOKEN_HEADER')] = \
-        issue_checker_token()
-    r = requests.post(uri, headers=headers, json=job_result)
+    auth = (os.getenv('THEMIS_FINALS_AUTH_MASTER_USERNAME'),
+            os.getenv('THEMIS_FINALS_AUTH_MASTER_PASSWORD'))
+    r = requests.post(uri, headers=headers, json=job_result, auth=auth)
     if r.status_code != requests.codes.ok:
         logger.error(r.status_code)
         logger.error(r.reason)
@@ -271,9 +270,9 @@ def queue_pull(job_data):
 
     uri = job_data['report_url']
     headers = {}
-    headers[os.getenv('THEMIS_FINALS_AUTH_TOKEN_HEADER')] = \
-        issue_checker_token()
-    r = requests.post(uri, headers=headers, json=job_result)
+    auth = (os.getenv('THEMIS_FINALS_AUTH_MASTER_USERNAME'),
+            os.getenv('THEMIS_FINALS_AUTH_MASTER_PASSWORD'))
+    r = requests.post(uri, headers=headers, json=job_result, auth=auth)
     if r.status_code != requests.codes.ok:
         logger.error(r.status_code)
         logger.error(r.reason)

@@ -120,7 +120,7 @@ def queue_push(job_data):
     status, updated_label, message = internal_push(
         params['endpoint'],
         params['capsule'],
-        urlsafe_b64decode(params['label'].encode('utf-8')),
+        urlsafe_b64decode(params['label'].encode('ascii')),
         metadata
     )
 
@@ -129,7 +129,7 @@ def queue_push(job_data):
     job_result = dict(
         status=status.value,
         flag=flag,
-        label=urlsafe_b64encode(updated_label),
+        label=urlsafe_b64encode(updated_label).decode('ascii'),
         message=message
     )
 

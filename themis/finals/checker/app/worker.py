@@ -3,14 +3,23 @@ from datetime import datetime
 import dateutil.parser
 from dateutil.tz import tzlocal
 from base64 import urlsafe_b64encode, urlsafe_b64decode
-from sys import exc_info
+import sys
 import requests
 import os
 from themis.finals.checker.result import Result
-from imp import load_source
 import logging
 import raven
 import jwt
+from .loader import load_checker
+
+logger = logging.getLogger(__name__)
+
+raven_enabled = os.getenv('SENTRY_DSN', None) is not None
+raven_client = None
+if raven_enabled:
+    raven_client = raven.Client(dsn=os.getenv('SENTRY_DSN'))
+
+checker_push, checker_pull = load_checker()
 
 
 class Metadata(object):
@@ -37,26 +46,12 @@ class Metadata(object):
         return self._service_name
 
 
-logger = logging.getLogger(__name__)
-
-checker_module_name = os.getenv(
-    'THEMIS_FINALS_CHECKER_MODULE',
-    os.path.join(os.getcwd(), 'checker.py')
-)
-checker_module = load_source('', checker_module_name)
-
-raven_enabled = os.getenv('SENTRY_DSN', None) is not None
-raven_client = None
-if raven_enabled:
-    raven_client = raven.Client(dsn=os.getenv('SENTRY_DSN'))
-
-
 def internal_push(endpoint, capsule, label, metadata):
     result = Result.INTERNAL_ERROR
     updated_label = label
     message = None
     try:
-        raw_result = checker_module.push(endpoint, capsule, label, metadata)
+        raw_result = checker_push(endpoint, capsule, label, metadata)
         if isinstance(raw_result, tuple):
             if len(raw_result) > 0:
                 result = raw_result[0]
@@ -69,7 +64,7 @@ def internal_push(endpoint, capsule, label, metadata):
     except Exception:
         if raven_enabled:
             raven_client.captureException()
-        logger.exception('An exception occurred', exc_info=exc_info())
+        logger.exception('An exception occurred', exc_info=sys.exc_info())
     return result, updated_label, message
 
 
@@ -77,7 +72,7 @@ def internal_pull(endpoint, capsule, label, metadata):
     result = Result.INTERNAL_ERROR
     message = None
     try:
-        raw_result = checker_module.pull(endpoint, capsule, label, metadata)
+        raw_result = checker_pull(endpoint, capsule, label, metadata)
         if isinstance(raw_result, tuple):
             if len(raw_result) > 0:
                 result = raw_result[0]
@@ -88,7 +83,7 @@ def internal_pull(endpoint, capsule, label, metadata):
     except Exception:
         if raven_enabled:
             raven_client.captureException()
-        logger.exception('An exception occurred', exc_info=exc_info())
+        logger.exception('An exception occurred', exc_info=sys.exc_info())
     return result, message
 
 
